@@ -19,6 +19,7 @@ services:
       DJANGO_SU_NAME: ${DJANGO_SU_NAME}
       DJANGO_SU_EMAIL: ${DJANGO_SU_EMAIL}
       DJANGO_SU_PASSWORD: ${DJANGO_SU_PASSWORD}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
 
   db:
     image: postgres
