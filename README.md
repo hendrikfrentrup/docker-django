@@ -5,7 +5,7 @@ Why Dockerize your Django app? Well, here are three compelling reasons:
 * Bring development and production environments as close together as possible ([#10 of the Twelve-Factor App](https://12factor.net/dev-prod-parity))
 * Increased productivity
 
-## Pre-requisites:
+## Prerequisites:
 * Docker & docker-compose
 * Python 3.6.5 (DJango 2.1)
 * virtualenv & pip
@@ -15,7 +15,7 @@ Why Dockerize your Django app? Well, here are three compelling reasons:
 
 ## Setup:
 
-We start by making a project directory (`mkdir docker-django`) and setting up a git repo (`git init`). To be honest, I usually create the repo on a remote git server (I.e. GitHub in this case) first and then clone it locally - saves some hassle setting up the remote. Then let's create and checkout a new develop branch right away (`git checkout -b develop`). The second part of the setup relates to dependency management, so we’ll create a virtual environment (`virtualenv env`) and activate it (`source env/bin/activate`) then, we’ll install Django (`pip install Django>=2.1`) Now, this will install Django locally in the virtual environment which is what we are aiming for right now. We’ll be using Django’s functionality to set up a project. But we also want to keep our dependencies in sync for other environments, so we’ll add the dependency to the requirements.txt file (`echo 'Django>=2.1' >> requirements.txt`) That deserves a first commit (`git add * && git commit -m "..."`)
+We start by making a project directory (`mkdir docker-django`) and setting up a git repo (`git init`). To be honest, I usually create the repo on a remote git server (i.e. GitHub in this case) first and then clone it locally - saves some hassle setting up the remote. Then let's create and checkout a new develop branch right away (`git checkout -b develop`). The second part of the setup relates to dependency management, so we’ll create a virtual environment (`virtualenv env`) and activate it (`source env/bin/activate`) then, we’ll install Django (`pip install Django>=2.1`) Now, this will install Django locally in the virtual environment which is what we are aiming for right now. We’ll be using Django’s functionality to set up a project. But we also want to keep our dependencies in sync for other environments, so we’ll add the dependency to the requirements.txt file (`echo 'Django>=2.1' >> requirements.txt`) That deserves a first commit (`git add * && git commit -m "..."`)
 
 The third part of the setup will be performed by Django: Let’s start a Django project (`django-admin startproject mysite`). I’m using Visual Studio Code as an editor so I’ll exclude the directory setup by it from version control (`echo ".vscode/" >> .gitignore`). We’ll do a test run of the project setup by running a local server (`python mysite/manage.py runserver`) This should allow us to check the locally running server at http://localhost:8000
 
@@ -28,7 +28,7 @@ The “app” is now running locally which is often the case during development.
 
 Now that the groundwork is laid, we can start the process of Dockerizing the app. It all starts with a Dockerfile (`touch Dockerfile`) which should look something like [this](https://github.com/hendrikfrentrup/docker-django/blob/c46deda3efc9a2b0fb6e3384f6f5807f7f7dbe26/Dockerfile)
 
-It builds an image based on the [Official Python image on Docker Hub](https://hub.docker.com/_/python/), copies our code, installs the requirements and launches the app.
+It builds an image based on the [official Python image on Docker Hub](https://hub.docker.com/_/python/), copies our code, installs the requirements and launches the app.
 
 We kick off the build of the image (`docker build -t django-docker:0.0.1 .`). This usually takes a while, but once it’s done, let’s go ahead and test it by running our “app” in a container (`docker run -p 8001:8001 docker-django:0.0.1`) Since the server running in the container is listening on port 8001 as opposed to 8000 compared to our “app” running locally, we are mapping port 8001 of the container to port 8001 of our local machine. Let's check that it responds on http://localhost:8001
 
