@@ -10,23 +10,35 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
-import os
+import os, sys
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
+opt={}
+with open(BASE_DIR+'/../.env') as f:
+    for l in f:
+        i=l.strip().split("=")
+        opt[i[0]]=i[1]
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+try:
+    SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', opt['DJANGO_SECRET_KEY'])
+    DEBUG = bool(os.environ.get('DJANGO_DEBUG', opt['DJANGO_DEBUG']))
+    DB_HOST= os.environ.get('DJANGO_DB_HOST', 'localhost')
+    DB_NAME = os.environ.get('DJANGO_DB_NAME', opt['DJANGO_DB_NAME'])
+    POSTGRES_USER = os.environ.get('POSTGRES_USER', opt['POSTGRES_USER'])
+    POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', opt['POSTGRES_PASSWORD'])
+except KeyError:
+    print("Environment variable not set or not specified in .env file")
+    sys.exit(1)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+if not SECRET_KEY:
+    print("A secret key need to be set as an environment variable") #or in /etc/secret_key.txt
+    sys.exit(1)
 
 ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -73,14 +85,13 @@ WSGI_APPLICATION = 'mysite.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/2.1/ref/settings/#databases
-POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD')
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'postgres',                      
-        'USER': 'postgres',
+        'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
-        'HOST': 'db',
+        'HOST': DB_HOST,
         'PORT': '5432', 
     },
     'local': {
