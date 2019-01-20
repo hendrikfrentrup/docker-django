@@ -11,28 +11,21 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
 import os, sys
+from decouple import config
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
-opt={}
-with open(BASE_DIR+'/../.env') as f:
-    for l in f:
-        i=l.strip().split("=")
-        opt[i[0]]=i[1]
 
-try:
-    SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', opt['DJANGO_SECRET_KEY'])
-    DEBUG = bool(os.environ.get('DJANGO_DEBUG', opt['DJANGO_DEBUG']))
-    DB_HOST= os.environ.get('DJANGO_DB_HOST', 'localhost')
-    DB_NAME = os.environ.get('DJANGO_DB_NAME', opt['DJANGO_DB_NAME'])
-    POSTGRES_USER = os.environ.get('POSTGRES_USER', opt['POSTGRES_USER'])
-    POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', opt['POSTGRES_PASSWORD'])
-except KeyError:
-    print("Environment variable not set or not specified in .env file")
-    sys.exit(1)
+SECRET_KEY = config('DJANGO_SECRET_KEY')
+DEBUG = config('DJANGO_DEBUG', default=False, cast=bool)
+WEB_HOST = config('DJANGO_WEB_HOST', default='localhost')
+DB_HOST = config('DJANGO_DB_HOST', default='localhost')
+DB_NAME = config('DJANGO_DB_NAME')
+POSTGRES_USER = config('POSTGRES_USER')
+POSTGRES_PASSWORD = config('POSTGRES_PASSWORD')
 
 if not SECRET_KEY:
     print("A secret key need to be set as an environment variable") #or in /etc/secret_key.txt
