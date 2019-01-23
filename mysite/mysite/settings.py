@@ -31,7 +31,7 @@ if not SECRET_KEY:
     print("A secret key need to be set as an environment variable") #or in /etc/secret_key.txt
     sys.exit(1)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [WEB_HOST, 'localhost']
 
 # Application definition
 
@@ -131,3 +131,4 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/2.1/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
