@@ -7,10 +7,10 @@ Why Dockerize your Django app? Well, here are three compelling reasons:
 
 ## Prerequisites:
 * Docker & docker-compose
-* Python 3.6.5 (DJango 2.1)
+* Python 3.6.5 (Django 2.1)
 * virtualenv & pip
 * git
-* An basic understanding of Django (e.g. by doing the Django tutorial)
+* A basic understanding of Django (e.g. by doing the Django tutorial)
 
 
 ## Setup:
