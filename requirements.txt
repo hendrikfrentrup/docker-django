@@ -1,0 +1,4 @@
+Django>=2.1
+psycopg2-binary
+gunicorn
+python-decouple

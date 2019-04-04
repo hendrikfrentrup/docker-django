@@ -1,0 +1,26 @@
+version: "3"
+
+services:
+  web:
+    build: .
+    command: gunicorn mysite.wsgi --bind 0.0.0.0:8001
+    depends_on:
+      - db
+    networks:
+      - backend
+
+  nginx:
+    image: nginx:latest
+    networks:
+      - backend
+    depends_on:
+      - web
+
+  db:
+    image: postgres
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
