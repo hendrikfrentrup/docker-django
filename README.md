@@ -55,7 +55,7 @@ Now, if we tear down our old container (`docker-compose down`) and restart all s
 Eventually we want to develop an app, so let’s start an app within our project:
 ```
 cd mysite
-python mysite/manage.py startapp myapp
+python manage.py startapp myapp
 ```
 
 

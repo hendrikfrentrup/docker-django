@@ -2,7 +2,7 @@
 
 # Collect static assets
 echo "Collect static assets"
-python manage.py collectstatic
+python manage.py collectstatic --no-input
 
 # Apply database migrations
 echo "Apply database migrations"
