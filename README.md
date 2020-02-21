@@ -1,5 +1,22 @@
 # A template project for a Dockerised Django app
 
+## Presentations
+
+A state of this project was presented at Docker Auckland:
+https://www.slideshare.net/frentrup/dockerize-a-django-app-elegantly
+
+## Articles
+
+In detail, the articles describe the development process:
+
+Number 1: Setup and admin tasks
+https://medium.com/devopslinks/tech-edition-how-to-dockerize-a-django-web-app-elegantly-924c0b83575d
+
+Number 2: Local debugging, proxy and logging
+https://medium.com/devopslinks/tech-edition-django-dockerization-with-bells-and-whistles-and-a-tad-bit-of-cleverness-2b5d1b57e289
+
+## Motivation
+
 Why Dockerize your Django app? Well, here are three compelling reasons:
 * Infrastructure-as-code
 * Bring development and production environments as close together as possible ([#10 of the Twelve-Factor App](https://12factor.net/dev-prod-parity))
@@ -102,3 +119,200 @@ For development purposes, we want to be able to see our Postgres schema and prob
 With the credentials from the environment variables, we should be able to login. To establish a connection to our database, let's click on "Add server". This opens a model where "Name" can be anything we want, say “Test”, then let's click on the tab “Connection” and fill in `db` as hostname, and our database credentials defined in the .env file for username and password, so for examples `postgres` and `secret`. Once a connection is established to the db - it will prompt if this did not succeed - we can browse the schema and look at some sample data in the database. Happy days for DB admins! Now, just as a matter of convenience, let’s also expose the port `5432` of our container so that our IDE can show us the schema by tapping into localhost.
 
 At this point we already have a pretty neat development environment.
+
+### Decouple
+
+Earlier, I alluded to this great situation of having our database running in a container and having the app running locally. However, we have set up our system for the app to run in a container and running a local app doesn’t work at the moment.
+So, what if I want to debug the web app? It’s hard to debug inside containers. It’s definitely worth being able to run a local app with other containerized services alongside. It’s even possible to run a local app and a containerized app side by side and this can be quite useful in development to test for side effects. After all, we want to build scalable apps and here scaling is part of the development environment
+
+So, why doesn’t it work? For one, the containers are spun up with all the environment variables in `.env` specified, which we don’t have available locally. Moreover, our locally running app doesn’t recognize the `db` host specified in our Django settings, because the containerized database is mapped to a port on localhost.
+
+We therefore make a few small changes to our `settings.py` file so that all local app and containers to run side by side. We’ll use a useful python package called [decouple](https://pypi.org/project/python-decouple/). Let’s also remember to add that to our requirements!
+
+```
+from decouple import configSECRET_KEY = config(‘DJANGO_SECRET_KEY’)
+…
+DB_HOST = config('DJANGO_DB_HOST', default='localhost')
+POSTGRES_USER = config('POSTGRES_USER')
+POSTGRES_PASSWORD = config('POSTGRES_PASSWORD')
+…
+```
+
+The decouple module is a bit more sophisticated than getting our config directly from environment variables (`POSTGRES_PASSWORD = os.environ.get(‘POSTGRES_PASSWORD’)`). It also applied a useful and commonly used hierarchy to obtaining config: First, look for an environment variable, otherwise check for a `.env` file in the project root, otherwise go for the default. It also throws useful exceptions such as
+
+```
+decouple.UndefinedValueError: MISSING_CONFIG not found. Declare it as envvar or define a default value.
+```
+
+So, our locally running app will try to locate the `.env` file and read optional parameters from there, but only if the environment settings are not set. Let’s notice the fallback option for the `DB_HOST` is `localhost` as this is not specified in the `.env` file, instead we specify this in our `docker-compose.yml` file under the web service:
+
+```
+environment:
+ DJANGO_DB_HOST: "db"
+ ```
+
+ The db setting change to this:
+
+```
+ DATABASES = {
+ ‘default’: {
+ ‘ENGINE’: ‘django.db.backends.postgresql’,
+ ‘NAME’: ‘postgres’, 
+ ‘USER’: POSTGRES_USER,
+ ‘PASSWORD’: POSTGRES_PASSWORD,
+ ‘HOST’: DB_HOST,
+ ‘PORT’: ‘5432’, 
+ },
+```
+
+ We will add the `DJANGO_DEBUG=True` to our `.env` file. Now, we just have to catch up with our container in our local environment and add the required Python Postgres module to our local virtual environment (`pip install psycopg2-binary`).
+
+If we wanted run migrate from our local machine and make the changes against the containerized database, then we would have to follow a similar approach for our migration, but it is better practice to run migrations from a container anyway.
+
+### Moving to a proper web server and employing a proxy server
+
+So, we are still running Django’s development server inside our container. In the spirit of moving closer to a production environment, we’ll switch to a proper web server and since all the cool kids are using nginx these days, so will we. Peer pressure, what could go wrong? There is also an official repository of [nginx](https://hub.docker.com/_/nginx/). Thank you, peers! Let’s go ahead and add that as a service:
+
+```
+nginx:
+ image: nginx:latest
+ ports:
+  — 8088:80
+```
+
+We are mapping nginx’s port 80 to our `localhost` port 8088. We don’t worry about running out of ports as we have another 60000+ available (2¹⁶ to be precise).
+
+Let’s check if it’s running by visiting [`http://localhost:8088`](http://localhost:8088). Yep, looks good. Also, we can note the nginx logline in the terminal where we’ve spun up our containers:
+
+```
+nginx_1 | 192.168.0.1 — — [05/Dec/2018:10:18:31 +0000] “GET / HTTP/1.1” 304 0 “-” “<some User-Agent stuff>” “-”
+```
+
+So this nginx proxy server will help us handle requests and serving static files, but first we need to configure nginx by adding a config file:
+````
+mkdir nginx
+touch nginx/default.conf
+````
+
+A really dead simple configuration would look something like this:
+
+```
+server {
+ listen 80;
+ server_name localhost;location / {
+ proxy_pass http://web:8001;
+ }
+}
+````
+
+So, we telling nginx to listen on port 80 and we forwarding requests to `/` on this port to our web service on port 8001. At the same time, let’s add the nginx service to the same network as the web service, make sure web is up and running when we fire up nginx and also put the config file from our local repo where it should be in the container by mapping a volume:
+
+```
+volumes:
+  — ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+networks:
+  — backend
+depends_on:
+  — web
+```
+
+Now, we’ll also change the container to run a proper web server instead of a simple Django development server. We’ll opt for gunicorn, so let’s add that to our requirements:
+
+```
+echo “gunicorn” >> requirements.txt
+```
+
+It’s totally optional to also install gunicorn locally as our intention is to run the Django debug server locally and gunicorn in the container. To kick off a gunicorn server in our container, we modify our command in `docker-compose.yml` for the web service to the following:
+
+```
+command: gunicorn mysite.wsgi — bind 0.0.0.0:8001
+```
+
+For now, let’s add both `'localhost'` as well as our `WEB_HOST` to the list of allowed hosts in our Django `settings.py`. This allows us to access our webapp when it is running locally as well as inside a container.
+
+```
+ALLOWED_HOSTS = [WEB_HOST, ‘localhost’]
+```
+
+We may otherwise come across an error page saying “DisallowedHost” (if Django is in Debug mode) or just a Bad Request (400) error.
+
+Now, if we hit our nginx service at [`http://localhost:8088/admin`](http://localhost:8088/admin), we’ll be served our admin login page but it looks different to what we are used to. It’s because our gunicorn server is not intended to serve static files, so we will have to configure nginx to instead serve the static files. To this end, we add the following lines to our `default.conf`:
+
+```
+location /static {
+ alias /code/static;
+ }
+```
+
+Next, we approach the Django side of static files. At first let’s tell Django where we would like our directory for static files in its `settings.py`
+
+```
+STATIC_ROOT = os.path.join(BASE_DIR, ‘static’)
+````
+
+We’ll update a our `docker-compose.yml` file to map our local directory with the static files to a directory in our container:
+
+```
+volumes:
+  — ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+  — ./mysite/static:/code/static
+
+```
+
+Finally, we run `python mysite/manage.py collectstatic` and all static files for our app are pulled into the chosen directory. We should see the difference by refreshing our page on [`http://localhost:8088/admin`](http://localhost:8088/admin) — it should now look familiar. When we hit our web service directly on [`http://localhost:8001`](http://localhost:8001), we see the static files cannot be found since they are being served by the nginx service.
+
+We can also see that in our logs these things are recorded. There is quite a bit of information there. For example, nginx informs us about all the files it served on the request we have just sent off and the status codes 200, meaning success, is good news. However, the favicon could not be found as we are also notified by the log of the web server. For now, let’s just add this line to our nginx config, so that it stops complaining about a favicon:
+
+```
+location = /favicon.ico {access_log off;log_not_found off; }
+```
+
+Ok, this stack is in pretty good shape by now. Let’s make the data of our Postgres `db` service persist by mapping it to a local volume, which is very similar to what we have done for the SQLite data (Also let’s not forget to add that directory to our `.gitignore`!).
+
+```
+volumes:
+ — ./postgres-data:/var/lib/postgresql/data
+```
+
+### The fruits of our labor
+
+Now, a quick recap of what our setup looks like. We have multiple services running side by side now:
+
+ * Our main endpoint, the nginx service (http://localhost:8088)
+ * Direct endpoint of the app server (http://localhost:8001)
+ * The Postgres admin endpoint (http://localhost:8080)
+ * Our Postgres `db` service listening for connections (but not HTTP requests)  * (localhost:5432)
+ * If we run an app locally, we can also access it (http://localhost:8000)
+
+I would say we have already come along way from where the Django tutorial started off. All but the local app above are running once we execute one simple command: `docker-compose up`. Almost all of our infrastructure is defined in code and configuration is transparent. We also made our life easier by having a data migration handle the creation of a superuser. In order to get stuff up and running from a blank slate, one would have to run only two commands:
+
+```
+docker-compose up
+docker-compose exec web python manage.py migrate
+```
+
+Ok, granted we’d also have to add the `.env` file and create a virtual environment — something to automate at some point perhaps. Our database is persisted however, so if we tear down our containers, we can start everything from scratch and our admin user is still there and we can login to the `admin/` endpoint and also the `db-admin` service.
+
+Now, it would be prudent to separate the configuration for our various environments a bit more carefully and Docker has some neat functionality. First off, we move all our migration specific config into a separate YAML file (`docker-compose.migrate.yml`), such as the creation of our superuser. Let’s pool all the setup tasks in one bash script that gets invoked inside this specific container, such as collecting static assets and running migrations. As a side note, this service will have to wait for the database inside the `db` service to be ready to accept connections, otherwise it will fall over. This is called [controlling the startup order](https://docs.docker.com/compose/startup-order/). Luckily, there is a neat little [bash script](https://github.com/eficode/wait-for) that we can use to make the migrate service check for services being ready. Our service is started with the following commands, which wait for database connections being ready and runs migration as a collective:
+
+```
+command: [“./wait-for.sh”, “db:5432”, “ — “, “./run-migrations.sh”]
+```
+
+We can run these one off tasks by explicitly pointing Docker to this YAML file and make sure to remove the container once it’s all done: 
+
+```
+docker-compose -f docker-compose.migrate.yml run migrate -d — rm
+```
+
+At this point, let’s follow a similar approach to move all the development specific configuration into `docker-compose.override.yml`. Docker will automatically read this file and use it override the config in the base `docker-compose.yml`. Hence, we can keep debug flags, admin consoles, open ports and the mapping of directories separate from the basic service definitions.
+
+### Logging
+
+Finally, let’s touch on the topic of logging. I say “touch” because the topic is worth many articles in itself. In fact, logging has turned into a whole industry — there are multiple companies like Splunk and SumoLogic that offer managed solution to handle logging. Also all the cloud providers offer such services and it often makes sense to go with such a solution before you start managing log aggregators yourself. Specifically if your goal is to develop. So, while we are on a local machine, i.e. our laptops, we’ll keep our logs going to the standard output. That’s the most straight-forward way of keeping an eye on things. Also, all apps and services inside containers should stream to stdout as that’s where docker will catch those logs and pipe them to your local stdout. Now, Docker also has many other ways to handle logging and this can be specified by the logging drivers for each service individually.
+
+So we could also run a log aggregator in a Docker container, and this image contains the entire ELK — that stands for ElasticSearch, LogStach and Kibana. However, things will get intricate at this point. Depending on which logging driver we opt for, we could end up sending logs directly to ElasticSearch, but others would stream to the LogStach services, while yet other options would require a separate service to handle logs from all places and send them to their respective destination. Feel free to go down that rabbit hole and marvel at how complex things will get. No need for an explanation why manages log aggregation services are doing good business. So, unless you are actually setting up shared staging or production environments, let the logs in the development stage go to the standard output.
+
+## What's next
+
+Right, this was all DevOps now - it's time to actually make this app do something. There are countless examples of what the app could do - To-Do list is a classic one. Or it could be an Agile board. Maybe a chat app, or a multiplayer online game. That'll be part of another article.
