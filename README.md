@@ -5,6 +5,8 @@
 A state of this project was presented at Docker Auckland:
 https://www.slideshare.net/frentrup/dockerize-a-django-app-elegantly
 
+Also presented at Django London - skillscast:
+ 
 ## Articles
 
 In detail, the articles describe the development process:
